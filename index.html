@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budget Planning 2027</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="hero-card">
+
+            <div class="hero-logos">
+
+                <img src="imagenes/saint_gobain.png" alt="Saint-Gobain" class="hero-logo">
+
+                <div class="hero-divider"></div>
+
+                <img src="imagenes/total_rewards.jpg" alt="Total Rewards" class="hero-logo">
+
+            </div>
+
+            <div class="hero-line"></div>
+
+            <h1 class="hero-title">
+                Budget Planning 2027
+            </h1>
+
+        </header>
+
+        <main class="dashboard">
+            <section class="top-grid">
+                <article class="card managers-card">
+                    <div class="card-header">
+                        <h2>Managers</h2>
+                        <span class="pill">Corporate</span>
+                    </div>
+                    <div class="manager-controls">
+                        <input id="buscadorManagers" class="search-input" type="text" placeholder="Buscar por SGI o nombre" autocomplete="off">
+                        <button id="btnMostrarGeneral" class="general-btn" type="button">General</button>
+                    </div>
+                    <div id="listaManagers" class="manager-list">
+                        <p class="state-text">Cargando managers...</p>
+                    </div>
+                </article>
+
+                <article class="card info-card">
+                    <div class="card-header">
+                        <h2>Información General</h2>
+                        <span class="pill success">Activa</span>
+                    </div>
+                    <div class="info-grid">
+                        <div class="metric">
+                            <span class="metric-label">País</span>
+                            <strong id="paisSeleccionado">-</strong>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Manager seleccionado</span>
+                            <strong id="managerSeleccionado">Ninguno</strong>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Headcount</span>
+                            <strong id="headcount">0</strong>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card update-card">
+                    <div class="card-header">
+                        <h2>Actualización</h2>
+                        <span class="pill">Live</span>
+                    </div>
+                    <div class="update-content">
+                        <p class="update-label">Última actualización</p>
+                        <p id="timestamp" class="update-time">--</p>
+                        <div class="mini-metrics">
+                            <div class="mini-metric">
+                                <span>Estado</span>
+                                <strong>En revisión</strong>
+                            </div>
+                            <div class="mini-metric">
+                                <span>Próxima métrica</span>
+                                <strong>Compensación</strong>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+
+                <section class="card mail-card">
+
+                    <div class="card-header">
+
+                        <h2>Envío de Correos</h2>
+
+                        <span class="pill">
+                            Budget Planning
+                        </span>
+
+                    </div>
+
+                    <div class="mail-content">
+
+                        <input
+                            type="text"
+                            id="mailSearch"
+                            placeholder="Buscar manager..."
+                            class="mail-search">
+
+                        <div
+                            id="mailManagersList"
+                            class="mail-managers-list">
+
+                        </div>
+
+                        <button
+                            id="btnEnviarCorreos"
+                            class="btn send-mail-btn">
+
+                            📧 Enviar Correos
+
+                        </button>
+                    </div>
+
+                </section>
+            </section>
+
+            <section class="card consolidation-card">
+
+                <div class="card-header">
+
+                    <h2>📥 Consolidación de Respuestas</h2>
+
+                    <span class="pill">
+                        Budget Planning
+                    </span>
+
+                </div>
+
+                <div class="mail-content">
+
+                    <input
+                        type="file"
+                        id="excelFiles"
+                        accept=".xlsx"
+                        multiple>
+
+                    <button
+                        id="btnConsolidar"
+                        class="btn send-mail-btn">
+
+                        📥 Consolidar Archivos
+
+                    </button>
+
+                </div>
+
+            </section>            
+            <section class="card history-card">
+                <div class="card-header">
+                    <h2>Histórico del Manager</h2>
+                    <span class="pill">Auditoría</span>
+                </div>
+                <div class="history-content">
+                    <p id="historyEmptyState" class="state-text">Seleccione un manager para ver el historial.</p>
+                    <div id="listaHistorico" class="history-list"></div>
+                    <div id="historyActions" class="history-actions">
+
+                        <button
+                            id="btnExcel"
+                            class="action-btn">
+                            Descargar Excel
+                        </button>
+
+                        <button
+                            id="btnAprobar"
+                            class="action-btn success">
+                            Aprobar
+                        </button>
+
+                    </div>
+                </div>
+            </section>
+
+            <section class="card completed-card">
+
+                <div class="card-header">
+
+                    <h2>Completados</h2>
+
+                    <span class="pill">
+                        Pendientes de sábana
+                    </span>
+
+                </div>
+
+                <div class="completed-content">
+
+                    <p
+                        id="completedEmptyState"
+                        class="state-text">
+
+                        No hay históricos aprobados pendientes.
+
+                    </p>
+
+                    <div
+                        id="listaCompletados"
+                        class="history-list">
+
+                    </div>
+
+                    <div
+                        id="completedActions"
+                        class="history-actions">
+
+                        <button
+                            id="btnAgregarSabana"
+                            class="action-btn success">
+
+                            Agregar a Sábana
+
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <section class="card sheet-card">
+                <div class="sheet-header">
+                    <div>
+                        <h2>General</h2>
+                        <p>Vista consolidada de la organización para Budget Planning 2027</p>
+                    </div>
+                    <span class="sheet-badge">Corporate view</span>
+                </div>
+
+                <div class="sheet-actions">
+                    <button id="btnNuevoRegistro" class="btn btn-secondary" type="button">+ Nuevo Registro</button>
+                    <button id="btnExcelActual" class="btn btn-primary" type="button">Descargar Excel</button>
+                    <button id="btnGuardar" class="btn btn-primary" type="button">Guardar</button>
+                    <button id="btnActualizarSabana"class="btn btn-primary" type="button">Actualizar Sábana</button>
+                </div>
+
+                <div class="table-wrapper">
+                    <table id="tablaEquipo">
+                        <thead>
+                            <tr>
+                                <th>SGI</th>
+                                <th>Nombre</th>
+                                <th>BU</th>
+                                <th>Tipo Empleado</th>
+                                <th>CCO</th>
+                                <th>Puesto</th>
+                                <th>Área</th>
+                                <th>Fecha Ingreso</th>
+                                <th>Antigüedad</th>
+                                <th>Fecha Nacimiento</th>
+                                <th>Edad</th>
+                                <th>Género</th>
+                                <th>SD</th>
+                                <th>SM</th>
+                                <th>Inc Salarial %</th>
+                                <th>Promoción %</th>
+                                <th>Nivelación %</th>
+                                <th>Suma %</th>
+                                <th>Nuevo salario</th>
+                                <th>Comentarios</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="20" class="empty-state">Seleccione un manager para cargar la información.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
