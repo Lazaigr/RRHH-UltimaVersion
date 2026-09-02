@@ -5,6 +5,7 @@ import pandas as pd
 import openpyxl
 import io
 import uuid
+import unicodedata
 from datetime import date
 import pythoncom
 import win32com.client
@@ -1371,10 +1372,100 @@ def descargar_consolidado():
     methods=["POST"]
 )
 def actualizar_sabana():
+    if conn is None:
+        return jsonify({"success": False, "error": "No hay conexión con la base de datos"}), 503
 
-    return jsonify({
-        "ok": True
-    })
+    archivo = request.files.get("file")
+    if archivo is None or not archivo.filename.lower().endswith(".xlsx"):
+        return jsonify({"success": False, "error": "Selecciona un archivo .xlsx"}), 400
+
+    try:
+        consolidado = pd.read_excel(archivo, engine="openpyxl")
+
+        def normalizar_columna(nombre):
+            return unicodedata.normalize("NFKD", str(nombre)).encode("ascii", "ignore").decode().strip().lower()
+
+        columnas = {normalizar_columna(nombre): nombre for nombre in consolidado.columns}
+
+        def obtener_columna(*nombres):
+            for nombre in nombres:
+                if normalizar_columna(nombre) in columnas:
+                    return columnas[normalizar_columna(nombre)]
+            return None
+
+        columna_sgi = obtener_columna("SGI")
+        columna_inc = obtener_columna("Incremento Salarial", "inc_salarial")
+        columna_promocion = obtener_columna("Promoción", "Promocion", "promocion")
+        columna_nivelacion = obtener_columna("Nivelación", "Nivelacion", "nivelacion")
+        if not all([columna_sgi, columna_inc, columna_promocion, columna_nivelacion]):
+            return jsonify({"success": False, "error": "El consolidado no contiene las columnas requeridas"}), 400
+
+        registros = []
+        for _, fila in consolidado.iterrows():
+            valor_sgi = fila[columna_sgi]
+            sgi = str(int(valor_sgi)) if isinstance(valor_sgi, float) and valor_sgi.is_integer() else normalize_text(valor_sgi)
+            if not sgi or sgi.lower() == "nan":
+                continue
+            inc = to_number(fila[columna_inc]) or 0
+            promocion = to_number(fila[columna_promocion]) or 0
+            nivelacion = to_number(fila[columna_nivelacion]) or 0
+            registros.append((sgi, inc, promocion, nivelacion, inc + promocion + nivelacion))
+
+        if not registros:
+            return jsonify({"success": False, "error": "El consolidado no contiene SGI válidos"}), 400
+
+        version_id = uuid.uuid4()
+        columnas_budget = [
+            "sgi", "nombre_completo", "compania", "puesto", "pais", "tipo_empleado",
+            "salario_mensual", "inc_salarial", "promocion", "nivelacion", "suma_porcentual",
+            "nuevo_salario", "fondo_ahorro", "aguinaldo", "prima_vacacional", "vales",
+            "seguro_vida", "sgmm", "costo_total", "fecha_actualizacion", "version_id"
+        ]
+        columnas_sql = ", ".join(columnas_budget)
+
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO budget_versiones (version_id, fecha_creacion, usuario, descripcion)
+                VALUES (%s, NOW(), %s, %s)
+            """, (version_id, "Sistema", "Actualización desde consolidado"))
+            cur.execute(f"""
+                INSERT INTO budget_actual_historico ({columnas_sql})
+                SELECT {columnas_sql} FROM budget_actual
+            """)
+
+            actualizados = 0
+            for sgi, inc, promocion, nivelacion, suma in registros:
+                cur.execute("""
+                    UPDATE budget_actual
+                    SET inc_salarial = %s, promocion = %s, nivelacion = %s,
+                        suma_porcentual = %s, nuevo_salario = salario_mensual * (1 + %s / 100),
+                        fecha_actualizacion = NOW(), version_id = %s
+                    WHERE sgi = %s
+                """, (inc, promocion, nivelacion, suma, suma, version_id, sgi))
+                actualizados += cur.rowcount
+
+        conn.commit()
+        return jsonify({"success": True, "ok": True, "version_id": str(version_id), "registros_actualizados": actualizados})
+    except Exception as error:
+        conn.rollback()
+        print(f"Error actualizando sábana: {error}")
+        return jsonify({"success": False, "error": str(error)}), 500
+
+
+@app.route("/budget_versiones")
+def budget_versiones():
+    if conn is None:
+        return jsonify([])
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT version_id, fecha_creacion, descripcion
+            FROM budget_versiones ORDER BY fecha_creacion DESC
+        """)
+        versiones = cur.fetchall()
+    return jsonify([
+        {"version_id": str(version["version_id"]), "fecha_creacion": version["fecha_creacion"].isoformat(), "descripcion": version["descripcion"]}
+        for version in versiones
+    ])
 
 if __name__ == "__main__":
     app.run(
