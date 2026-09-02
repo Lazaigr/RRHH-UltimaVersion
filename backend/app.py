@@ -100,6 +100,51 @@ def ensure_schema():
 ensure_schema()
 
 
+def inicializar_budget_actual():
+    if conn is None:
+        return
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO budget_actual (
+                    sgi,
+                    salario_mensual,
+                    inc_salarial,
+                    promocion,
+                    nivelacion,
+                    suma_porcentual,
+                    nuevo_salario
+                )
+                SELECT
+                    sgi,
+                    salario_mensual,
+                    0,
+                    0,
+                    0,
+                    0,
+                    salario_mensual
+                FROM empleados_sg
+                WHERE sgi IS NOT NULL
+                ON CONFLICT (sgi) DO NOTHING
+            """)
+            cur.execute("""
+                UPDATE budget_actual AS b
+                SET salario_mensual = e.salario_mensual
+                FROM empleados_sg AS e
+                WHERE b.sgi = e.sgi
+                  AND b.salario_mensual IS NULL
+            """)
+        conn.commit()
+        print(f"Budget actual inicializado: {cur.rowcount} registros nuevos")
+    except Exception as error:
+        conn.rollback()
+        print(f"No se pudo inicializar budget_actual: {error}")
+
+
+inicializar_budget_actual()
+
+
 def normalize_text(value):
     return '' if value is None else str(value).strip()
 
@@ -197,9 +242,26 @@ def fetch_equipo(manager):
 
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT *
-            FROM empleados_sg
-            WHERE manager = %s
+            SELECT
+                e.*,
+                b.salario_mensual AS budget_salario_mensual,
+                b.inc_salarial,
+                b.promocion,
+                b.nivelacion,
+                b.suma_porcentual,
+                b.nuevo_salario,
+                b.fondo_ahorro,
+                b.aguinaldo,
+                b.prima_vacacional,
+                b.vales,
+                b.seguro_vida,
+                b.sgmm,
+                b.costo_total,
+                b.fecha_actualizacion,
+                b.version_id
+            FROM empleados_sg AS e
+            LEFT JOIN budget_actual AS b ON b.sgi = e.sgi
+            WHERE e.manager = %s
         """, (manager,))
         return cur.fetchall()
 
@@ -1416,10 +1478,10 @@ def actualizar_sabana():
 
         version_id = uuid.uuid4()
         columnas_budget = [
-            "sgi", "nombre_completo", "compania", "puesto", "pais", "tipo_empleado",
-            "salario_mensual", "inc_salarial", "promocion", "nivelacion", "suma_porcentual",
-            "nuevo_salario", "fondo_ahorro", "aguinaldo", "prima_vacacional", "vales",
-            "seguro_vida", "sgmm", "costo_total", "fecha_actualizacion", "version_id"
+            "sgi", "salario_mensual", "inc_salarial", "promocion", "nivelacion",
+            "suma_porcentual", "nuevo_salario", "fondo_ahorro", "aguinaldo",
+            "prima_vacacional", "vales", "seguro_vida", "sgmm", "costo_total",
+            "fecha_actualizacion", "version_id"
         ]
         columnas_sql = ", ".join(columnas_budget)
 
@@ -1430,8 +1492,9 @@ def actualizar_sabana():
             """, (version_id, "Sistema", "Actualización desde consolidado"))
             cur.execute(f"""
                 INSERT INTO budget_actual_historico ({columnas_sql})
-                SELECT {columnas_sql} FROM budget_actual
-            """)
+                SELECT {columnas_sql.replace(', version_id', '')}, %s
+                FROM budget_actual
+            """, (version_id,))
 
             actualizados = 0
             for sgi, inc, promocion, nivelacion, suma in registros:
@@ -1466,6 +1529,112 @@ def budget_versiones():
         {"version_id": str(version["version_id"]), "fecha_creacion": version["fecha_creacion"].isoformat(), "descripcion": version["descripcion"]}
         for version in versiones
     ])
+
+
+def serializar_budget(rows):
+    return [
+        {
+            key: value.isoformat() if hasattr(value, "isoformat") else str(value) if isinstance(value, uuid.UUID) else value
+            for key, value in row.items()
+        }
+        for row in rows
+    ]
+
+
+def consulta_budget_actual(tabla):
+    return f"""
+        SELECT
+            e.sgi,
+            e.nombre_completo,
+            e.compania,
+            e.puesto,
+            e.filiere AS area,
+            e.ceco,
+            e.pais,
+            e.tipo_empleado,
+            e.fecha_ingreso,
+            e.fecha_nacimiento,
+            e.sexo AS genero,
+            e.salario_diario,
+            e.manager,
+            b.salario_mensual,
+            b.inc_salarial,
+            b.promocion,
+            b.nivelacion,
+            b.suma_porcentual,
+            b.nuevo_salario,
+            b.fondo_ahorro,
+            b.aguinaldo,
+            b.prima_vacacional,
+            b.vales,
+            b.seguro_vida,
+            b.sgmm,
+            b.costo_total,
+            b.fecha_actualizacion,
+            b.version_id
+        FROM empleados_sg AS e
+        LEFT JOIN {tabla} AS b ON b.sgi = e.sgi
+        ORDER BY e.nombre_completo, e.sgi
+    """
+
+
+@app.route("/budget_actual")
+def budget_actual():
+    if conn is None:
+        return jsonify([])
+    with conn.cursor() as cur:
+        cur.execute(consulta_budget_actual("budget_actual"))
+        rows = cur.fetchall()
+    return jsonify(serializar_budget(rows))
+
+
+@app.route("/budget_actual/<version_id>")
+def budget_actual_version(version_id):
+    if conn is None:
+        return jsonify({"error": "No hay conexión con la base de datos"}), 503
+    try:
+        uuid.UUID(version_id)
+    except ValueError:
+        return jsonify({"error": "Versión inválida"}), 400
+
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+                e.sgi,
+                e.nombre_completo,
+                e.compania,
+                e.puesto,
+                e.filiere AS area,
+                e.ceco,
+                e.pais,
+                e.tipo_empleado,
+                e.fecha_ingreso,
+                e.fecha_nacimiento,
+                e.sexo AS genero,
+                e.salario_diario,
+                e.manager,
+                b.salario_mensual,
+                b.inc_salarial,
+                b.promocion,
+                b.nivelacion,
+                b.suma_porcentual,
+                b.nuevo_salario,
+                b.fondo_ahorro,
+                b.aguinaldo,
+                b.prima_vacacional,
+                b.vales,
+                b.seguro_vida,
+                b.sgmm,
+                b.costo_total,
+                b.fecha_actualizacion,
+                b.version_id
+            FROM empleados_sg AS e
+            LEFT JOIN budget_actual_historico AS b ON b.sgi = e.sgi
+                AND b.version_id = %s
+            ORDER BY e.nombre_completo, e.sgi
+        """, (version_id,))
+        rows = cur.fetchall()
+    return jsonify(serializar_budget(rows))
 
 if __name__ == "__main__":
     app.run(
