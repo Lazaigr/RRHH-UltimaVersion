@@ -9,6 +9,9 @@ const btnNuevoRegistro = document.getElementById('btnNuevoRegistro');
 const btnGuardar = document.getElementById('btnGuardar');
 const historyEmptyState = document.getElementById('historyEmptyState');
 const listaHistorico = document.getElementById('listaHistorico');
+const archivoActualizarSabana = document.getElementById('archivoActualizarSabana');
+const listaHistoricoBudget = document.getElementById('listaHistoricoBudget');
+const budgetHistoryEmptyState = document.getElementById('budgetHistoryEmptyState');
 
 let managerOptions = [];
 let selectedManager = null;
@@ -135,7 +138,7 @@ function normalizeRecord(empleado) {
 
     const fechaIngreso = findValue(empleado, ['fecha_ingreso', 'fechaIngreso', 'ingreso', 'f_ingreso']);
     const fechaNacimiento = findValue(empleado, ['fecha_nacimiento', 'fechaNacimiento', 'f_nacimiento']);
-    const baseSalary = toNumber(findValue(empleado, ['sm', 'salario_mensual', 'salario_mensual_base', 'salary', 'salario']));
+    const baseSalary = toNumber(findValue(empleado, ['budget_salario_mensual', 'sm', 'salario_mensual', 'salario_mensual_base', 'salary', 'salario']));
 
     return {
         sgi: findValue(empleado, ['sgi', 'id']),
@@ -151,7 +154,7 @@ function normalizeRecord(empleado) {
         edad: calculateEdad(fechaNacimiento) || findValue(empleado, ['edad']) || '',
         genero: findValue(empleado, ['genero', 'sexo', 'gender']),
         sd: findValue(empleado, ['sd', 'salario_diario', 'salario_diario_base']),
-        sm: baseSalary !== null ? baseSalary : findValue(empleado, ['sm', 'salario_mensual', 'salario_mensual_base', 'salary']),
+        sm: baseSalary !== null ? baseSalary : findValue(empleado, ['budget_salario_mensual', 'sm', 'salario_mensual', 'salario_mensual_base', 'salary']),
         incSalarial: findValue(empleado, ['inc_salarial', 'incSalarial', 'incremento_salarial', 'inc']) || '',
         promocion: findValue(empleado, ['promocion', 'promotion']) || '',
         nivelacion: findValue(empleado, ['nivelacion', 'nivelacion_salarial']) || '',
@@ -638,7 +641,18 @@ function initializeMailSearch() {
 }
 
 async function loadGeneral() {
-    if (allEmployees.length) {
+    await loadBudgetSheet();
+}
+
+async function loadBudgetSheet(versionId = null) {
+    const endpoint = versionId
+        ? `http://127.0.0.1:5000/budget_actual/${encodeURIComponent(versionId)}`
+        : 'http://127.0.0.1:5000/budget_actual';
+
+    try {
+        const response = await fetch(endpoint);
+        if (!response.ok) throw new Error('No se pudo cargar la sábana Budget');
+        const data = await response.json();
         selectedManager = null;
         managerSeleccionado.textContent = 'General';
         const paisSeleccionado =
@@ -647,24 +661,7 @@ async function loadGeneral() {
         if (paisSeleccionado) {
             paisSeleccionado.textContent = '-';
         }
-        renderTeam(allEmployees);
-        clearHistory();
-
-        if (searchInput) {
-            searchInput.value = '';
-        }
-        filterManagers();
-        return;
-    }
-
-    try {
-        const response = await fetch('http://127.0.0.1:5000/empleados');
-        const data = await response.json();
-        allEmployees = Array.isArray(data) ? data : [];
-
-        selectedManager = null;
-        managerSeleccionado.textContent = 'General';
-        renderTeam(allEmployees);
+        renderTeam(data);
         clearHistory();
 
         if (searchInput) {
@@ -673,38 +670,11 @@ async function loadGeneral() {
         filterManagers();
     } catch (error) {
         console.error(error);
+        if (tableBody) tableBody.innerHTML = '<tr><td colspan="20" class="empty-state">No fue posible cargar la sábana.</td></tr>';
     }
 }
 
 async function loadTeam(manager) {
-    if (allEmployees.length) {
-        const filtered = allEmployees.filter((empleado) => normalizeText(empleado.manager) === normalizeText(manager));
-        const paisSeleccionado =
-    document.getElementById("paisSeleccionado");
-
-        const countryMap = {
-            MEX: "México",
-            COL: "Colombia",
-            ECU: "Ecuador",
-            PER: "Perú",
-            ARG: "Argentina",
-            BRA: "Brasil",
-            CHL: "Chile"
-        };
-
-        console.log(filtered[0]);
-        if (paisSeleccionado && filtered.length > 0) {
-
-            const paisCode = filtered[0].pais;
-
-            paisSeleccionado.textContent =
-                countryMap[paisCode] || paisCode || "-";
-        }
-        renderTeam(filtered);
-        await loadHistory(manager);
-        return;
-    }
-
     try {
         const response = await fetch(`http://127.0.0.1:5000/equipo/${encodeURIComponent(manager)}`);
         if (!response.ok) {
@@ -1443,36 +1413,44 @@ document
 
 
 async function actualizarSabana() {
+    archivoActualizarSabana?.click();
+}
 
+async function enviarActualizacionSabana(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const boton = document.getElementById('btnActualizarSabana');
+    const textoOriginal = boton.textContent;
+    boton.disabled = true;
+    boton.textContent = 'Procesando...';
     try {
-
         const response =
             await fetch(
                 "http://127.0.0.1:5000/actualizar_sabana",
                 {
-                    method: "POST"
+                    method: "POST",
+                    body: formData
                 }
             );
 
         const result =
             await response.json();
 
-        if (result.ok) {
-
-            alert(
-                "✅ Sábana actualizada"
-            );
-
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || 'Error actualizando sábana');
         }
+        alert(`✅ Sábana actualizada correctamente\n\nVersión generada: ${result.version_id}\nRegistros actualizados: ${result.registros_actualizados}`);
+        cargarHistoricoBudget();
 
     }
     catch(error){
 
         console.error(error);
 
-        alert(
-            "Error actualizando sábana"
-        );
+        alert(`❌ ${error.message}`);
+    } finally {
+        boton.disabled = false;
+        boton.textContent = textoOriginal;
 
     }
 
@@ -1487,4 +1465,46 @@ document
         actualizarSabana
     );
 
+archivoActualizarSabana?.addEventListener('change', () => {
+    const file = archivoActualizarSabana.files[0];
+    if (file) enviarActualizacionSabana(file);
+    archivoActualizarSabana.value = '';
+});
+
+async function cargarHistoricoBudget() {
+    if (!listaHistoricoBudget || !budgetHistoryEmptyState) return;
+    try {
+        const response = await fetch('http://127.0.0.1:5000/budget_versiones');
+        if (!response.ok) throw new Error('No se pudieron cargar las versiones');
+        const versiones = await response.json();
+        budgetHistoryEmptyState.textContent = versiones.length
+            ? 'Versiones registradas'
+            : 'No hay versiones registradas todavía.';
+        listaHistoricoBudget.innerHTML = `
+            <div class="history-item active" data-budget-version="">
+                <strong>Versión actual</strong>
+                <span>Sábana viva</span>
+                <span>Última actualización</span>
+            </div>
+        ` + versiones.map((version) => `
+            <div class="history-item" data-budget-version="${escapeHtml(version.version_id)}">
+                <strong>${escapeHtml(new Date(version.fecha_creacion).toLocaleString('es-MX'))}</strong>
+                <span>${escapeHtml(version.version_id)}</span>
+                <span>${escapeHtml(version.descripcion || '')}</span>
+            </div>
+        `).join('');
+        listaHistoricoBudget.querySelectorAll('[data-budget-version]').forEach((item) => {
+            item.addEventListener('click', async () => {
+                listaHistoricoBudget.querySelectorAll('.history-item').forEach((entry) => entry.classList.remove('active'));
+                item.classList.add('active');
+                await loadBudgetSheet(item.dataset.budgetVersion || null);
+            });
+        });
+    } catch (error) {
+        budgetHistoryEmptyState.textContent = 'No fue posible cargar las versiones.';
+        console.error(error);
+    }
+}
+
 initialize();
+cargarHistoricoBudget();

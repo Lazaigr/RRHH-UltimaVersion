@@ -240,7 +240,8 @@
                     <button id="btnNuevoRegistro" class="btn btn-secondary" type="button">+ Nuevo Registro</button>
                     <button id="btnExcelActual" class="btn btn-primary" type="button">Descargar Excel</button>
                     <button id="btnGuardar" class="btn btn-primary" type="button">Guardar</button>
-                    <button id="btnActualizarSabana"class="btn btn-primary" type="button">Actualizar Sábana</button>
+                    <button id="btnActualizarSabana" class="btn btn-primary" type="button">Actualizar Sábana</button>
+                    <input id="archivoActualizarSabana" type="file" accept=".xlsx" hidden>
                 </div>
 
                 <div class="table-wrapper">
@@ -275,6 +276,17 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </section>
+
+            <section class="card history-card">
+                <div class="card-header">
+                    <h2>Histórico Budget</h2>
+                    <span class="pill">Versiones</span>
+                </div>
+                <div class="history-content">
+                    <p id="budgetHistoryEmptyState" class="state-text">Cargando versiones...</p>
+                    <div id="listaHistoricoBudget" class="history-list"></div>
                 </div>
             </section>
         </main>
