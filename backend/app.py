@@ -1588,6 +1588,18 @@ def budget_actual():
     return jsonify(serializar_budget(rows))
 
 
+@app.route("/prestaciones_generales")
+def prestaciones_generales():
+    """Return the benefits table as the single source for the Streamlit section."""
+    if conn is None:
+        return jsonify({"error": "No hay conexión con la base de datos"}), 503
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT * FROM prestaciones_generales")
+        rows = cur.fetchall()
+    return jsonify(serializar_budget(rows))
+
+
 @app.route("/budget_actual/<version_id>")
 def budget_actual_version(version_id):
     if conn is None:

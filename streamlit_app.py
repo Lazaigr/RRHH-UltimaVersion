@@ -12,6 +12,12 @@ import pandas as pd
 import requests
 import streamlit as st
 
+try:
+    from st_aggrid import AgGrid, GridOptionsBuilder
+except ImportError:
+    AgGrid = None
+    GridOptionsBuilder = None
+
 
 API_URL = os.getenv("FLASK_API_URL", "http://127.0.0.1:5000").rstrip("/")
 REQUEST_TIMEOUT = 45
@@ -34,56 +40,89 @@ FIELD_MAP = {
     "Nuevo salario": "nuevoSalario", "Comentarios": "comentarios",
 }
 
-st.set_page_config(page_title="Budget Planning 2027", page_icon="📊", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Budget Planning 2027", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
-    :root { --blue:#1565C0; --blue-dark:#0d2c57; --green:#1F8B4C; --ink:#1F2937; --muted:#6C757D; --line:#E3E8EF; --canvas:#EEF2F6; }
-    .stApp { background: radial-gradient(circle at 10% 0%, #f8fbff 0, var(--canvas) 42%, #e8eef5 100%); color:var(--ink); font-family:'DM Sans', sans-serif; }
+    :root { --blue:#1557a6; --blue-dark:#102e52; --green:#24784b; --ink:#1d2a3a; --muted:#68788a; --line:#dbe4ee; --canvas:#edf2f7; --surface:#ffffff; --soft:#f5f8fb; --shadow:0 10px 26px rgba(27,55,87,.07); }
+    .stApp { background:linear-gradient(180deg,#f7faff 0%,var(--canvas) 58%,#e8eef5 100%); color:var(--ink); font-family:'DM Sans', sans-serif; }
+    [data-testid="stSidebar"] { background:#f7faff; border-right:1px solid #d9e4ef; }
+    [data-testid="stSidebar"] .block-container { padding:20px 16px; }
+    [data-testid="stMetric"] { background:var(--surface); border:1px solid #d4e0ec; border-radius:14px; padding:12px 14px; min-height:88px; box-shadow:0 5px 16px rgba(27,55,87,.05); }
+    [data-testid="stMetricLabel"] { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.1em; }
+    [data-testid="stMetricValue"] { color:var(--blue-dark); font-family:'Space Grotesk',sans-serif; font-size:24px; }
     [data-testid="stHeader"] { background:transparent; }
-    .block-container { max-width:1600px; padding:20px 18px 28px; }
-    .hero { background:#fff; border:1px solid rgba(21,101,192,.08); border-radius:24px; padding:24px 28px 20px; box-shadow:0 14px 40px rgba(15,23,42,.08); }
+    .block-container { max-width:1680px; padding:16px 24px 24px; }
+    .hero { background:var(--surface); border:1px solid rgba(21,101,192,.08); border-radius:18px; padding:18px 26px 16px; box-shadow:var(--shadow); }
     .logos { display:flex; justify-content:center; align-items:center; gap:40px; min-height:70px; }
     .logos img { height:70px; max-width:245px; object-fit:contain; }
     .divider { width:2px; height:80px; background:#1f5cb8; }
     .hero-line { margin-top:24px; border-top:1px solid #d9e1ef; }
-    .hero h1 { margin:24px 0 0; text-align:center; font:700 42px 'Space Grotesk', sans-serif; color:var(--blue-dark); }
-    .section-label { margin:18px 0 8px; color:var(--blue-dark); font:700 18px 'Space Grotesk', sans-serif; }
-    .dashboard-card { background:#fff; border:1px solid rgba(15,23,42,.04); border-radius:20px; box-shadow:0 14px 40px rgba(15,23,42,.08); overflow:hidden; min-height:286px; }
-    .card-header { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; background:linear-gradient(90deg,#f8fbff,#eef6ff); border-bottom:1px solid var(--line); }
-    .card-header h2 { margin:0; color:#17324f; font:700 16px 'Space Grotesk', sans-serif; }
-    .pill { border-radius:999px; padding:6px 10px; color:var(--blue); background:rgba(21,101,192,.1); font-size:12px; font-weight:700; white-space:nowrap; }
+    .hero h1 { margin:18px 0 0; text-align:center; font:700 38px 'Space Grotesk', sans-serif; color:var(--blue-dark); }
+    .section-label { margin:14px 0 7px; color:var(--blue-dark); font:700 17px 'Space Grotesk', sans-serif; }
+    .executive-label { margin:12px 0 6px; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
+    .dashboard-card { background:var(--surface); border:1px solid rgba(15,23,42,.04); border-radius:16px; box-shadow:var(--shadow); overflow:hidden; min-height:286px; }
+    .card-header { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 15px; background:linear-gradient(90deg,#f8fbff,#eef5fc); border-bottom:1px solid var(--line); }
+    .card-header h2 { margin:0; color:#17324f; font:700 15px 'Space Grotesk', sans-serif; }
+    .pill { border-radius:999px; padding:5px 9px; color:var(--blue); background:rgba(21,101,192,.09); font-size:11px; font-weight:700; white-space:nowrap; }
     .pill.green { color:var(--green); background:rgba(31,139,76,.12); }
-    .metric { background:#f8fbff; border:1px solid var(--line); border-radius:12px; padding:10px 12px; min-height:58px; }
+    .metric { background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:9px 11px; min-height:52px; }
     .metric small { display:block; margin-bottom:7px; color:var(--muted); font-size:11px; letter-spacing:.12em; text-transform:uppercase; }
     .metric strong { color:#12304a; font-size:16px; }
-    .sheet-panel { background:#fff; border:1px solid rgba(15,23,42,.04); border-radius:20px; box-shadow:0 14px 40px rgba(15,23,42,.08); padding:0 14px 14px; }
-    [data-testid="stVerticalBlockBorderWrapper"] { background:#fff; border-color:rgba(15,23,42,.06); border-radius:20px; box-shadow:0 14px 40px rgba(15,23,42,.08); }
+    .sheet-panel { background:var(--surface); border:1px solid rgba(15,23,42,.04); border-radius:16px; box-shadow:0 12px 30px rgba(15,23,42,.08); padding:0 12px 12px; }
+    .sheet-panel.primary { box-shadow:0 14px 34px rgba(21,87,166,.11); border-color:#cbdbea; }
+    .action-center { background:var(--surface); border:1px solid #cbdbea; border-radius:16px; box-shadow:var(--shadow); padding:0 14px 14px; }
+    .action-center .card-header { margin:0 -14px 12px; }
+    .action-toolbar { margin-bottom:12px; }
+    .action-toolbar div[data-testid="stHorizontalBlock"] { align-items:stretch; }
+    .action-toolbar div[data-testid="stFileUploader"] section { min-height:38px; }
+    .action-note { color:var(--muted); font-size:12px; line-height:1.45; margin:0 0 12px; }
+    .history-grid [data-testid="stVerticalBlockBorderWrapper"] { min-height:170px; }
+    [data-testid="stVerticalBlockBorderWrapper"] { background:var(--surface); border-color:rgba(15,23,42,.06); border-radius:16px; box-shadow:var(--shadow); }
     .dashboard-marker { height:0; overflow:hidden; margin:0; padding:0; }
-    [data-testid="stVerticalBlockBorderWrapper"]:has(.dashboard-marker) { height:300px; min-height:300px; padding:0 16px 14px; overflow:hidden; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.dashboard-marker) { min-height:274px; padding:0 13px 12px; overflow:hidden; }
     [data-testid="stVerticalBlockBorderWrapper"]:has(.dashboard-marker) > div { height:100%; }
-    .sheet-head { display:flex; justify-content:space-between; align-items:center; padding:16px 8px 8px; gap:16px; }
-    .sheet-head h2 { margin:0 0 6px; color:#17324f; font:700 22px 'Space Grotesk', sans-serif; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.dashboard-marker) .card-header { margin:0 -13px; padding:12px 13px; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.dashboard-marker) .stSelectbox,
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.dashboard-marker) .stMultiSelect { margin-top:4px; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.dashboard-marker) .stButton { margin-top:4px; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.kpi-marker) { min-height:132px; padding:0 12px 10px; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.kpi-marker) .card-header { margin:0 -12px; padding:10px 12px; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.kpi-marker) .metric { min-height:44px; padding:7px 9px; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.kpi-marker) .metric small { margin-bottom:3px; font-size:10px; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.kpi-marker) .metric strong { font-size:14px; }
+    .sheet-head { display:flex; justify-content:space-between; align-items:center; padding:14px 7px 7px; gap:16px; }
+    .sheet-head h2 { margin:0 0 4px; color:#17324f; font:700 21px 'Space Grotesk', sans-serif; }
     .sheet-head p { margin:0; color:var(--muted); }
-    .sheet-badge { background:var(--blue); color:white; border-radius:999px; padding:8px 12px; font-size:12px; font-weight:700; white-space:nowrap; }
-    .history-panel { background:#fff; border:1px solid rgba(15,23,42,.04); border-radius:20px; box-shadow:0 14px 40px rgba(15,23,42,.08); overflow:hidden; min-height:220px; }
+    .sheet-badge { background:var(--blue); color:white; border-radius:999px; padding:7px 11px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .history-panel { background:var(--surface); border:1px solid rgba(15,23,42,.04); border-radius:16px; box-shadow:var(--shadow); overflow:hidden; min-height:190px; }
     .history-body { padding:12px 14px; max-height:260px; overflow-y:auto; }
     .history-row { border:1px solid var(--line); border-radius:10px; padding:9px 11px; background:#f8fbff; margin-bottom:8px; font-size:12px; }
     .history-row strong { display:block; margin-bottom:4px; }
     .version-selected { border-color:var(--blue); background:#eaf3ff; }
-    .stButton > button, .stDownloadButton > button { border-radius:10px; font-weight:700; border:1px solid #d8e5f4; min-height:36px; padding:4px 8px; }
+    .stButton > button, .stDownloadButton > button { border-radius:8px; font-weight:700; border:1px solid #d3dfec; min-height:38px; padding:5px 10px; transition:background .15s ease,border-color .15s ease; }
+    .stButton > button:hover, .stDownloadButton > button:hover { border-color:#9db8d5; }
     .stButton > button[kind="primary"], .stDownloadButton > button { background:var(--blue); color:#fff; border-color:var(--blue); }
-    .action-bar { margin:4px 0 12px; padding:10px; border:1px solid var(--line); border-radius:14px; background:#fbfdff; }
+    .action-bar { margin:3px 0 10px; padding:8px; border:1px solid var(--line); border-radius:10px; background:#f8fafc; }
+    .action-bar .action-label { color:var(--blue-dark); }
     .action-label { margin:0 0 6px; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
     .selected-file { margin:6px 0 8px; padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:#f8fbff; color:#17324f; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     div[data-testid="stHorizontalBlock"] { align-items:flex-end; }
-    div[data-testid="stDataEditor"] { border:1px solid var(--line); border-radius:14px; overflow:hidden; min-height:600px; }
+    div[data-testid="stDataEditor"] { border:1px solid #cfdbe8; border-radius:10px; overflow:hidden; min-height:600px; box-shadow:0 2px 8px rgba(27,55,87,.04); }
+    div[data-testid="stDataFrame"] { border:1px solid #cfdbe8; border-radius:10px; overflow:hidden; }
+    div[data-testid="stExpander"] { border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+    div[data-testid="stExpander"] details summary { font-weight:700; color:var(--blue-dark); }
+    div[data-testid="stFileUploader"] section { border:1px dashed #b9c9da; border-radius:8px; background:#fbfdff; }
+    div[data-testid="stTextInput"] input, div[data-testid="stSelectbox"] input { border-radius:8px; }
+    .stCaption { color:var(--muted); }
+    .compact-card { padding:0 14px 14px; }
+    .compact-card .card-header { margin:0 -14px 12px; }
+    .version-help { color:var(--muted); font-size:12px; margin:0 0 8px; }
     div[data-testid="stVerticalBlock"] > div:has(> div[data-testid="stDataEditor"]) { width:100%; }
     div[data-testid="stSelectbox"] { margin-bottom:2px; }
-    div[data-testid="stFileUploader"] section { padding:4px 8px; min-height:38px; }
-    @media (max-width: 700px) { .block-container { padding:16px 12px 24px; } .hero { padding:20px; } .logos { gap:16px; } .logos img { height:48px; max-width:40%; } .divider { height:58px; } .hero h1 { font-size:30px; } .sheet-head { align-items:flex-start; flex-direction:column; } }
+    @media (max-width: 700px) { .block-container { padding:12px 10px 18px; } .hero { padding:16px; } .logos { gap:16px; } .logos img { height:48px; max-width:40%; } .divider { height:58px; } .hero h1 { font-size:30px; } .sheet-head { align-items:flex-start; flex-direction:column; } }
     </style>
     """,
     unsafe_allow_html=True,
@@ -141,6 +180,16 @@ def api_get(path, default=None):
         return response.json()
     except requests.RequestException as exc:
         st.error(f"No fue posible conectar con Flask: {exc}")
+        return default
+
+
+def api_get_silent(path, default=None):
+    """Read optional future endpoints without interrupting the main dashboard."""
+    try:
+        response = requests.get(endpoint(path), timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException:
         return default
 
 
@@ -302,6 +351,15 @@ def manager_option_label(item):
     return f'{item["sgi"]} - {item["nombre"]}'
 
 
+def version_label(item):
+    raw_date = item.get("fecha_creacion") or item.get("fecha") or item.get("created_at") or "Sin fecha"
+    try:
+        date_text = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00")).strftime("%d/%m/%Y")
+    except ValueError:
+        date_text = str(raw_date)
+    return f'{date_text} - {item.get("descripcion") or item.get("description") or item.get("version_id") or "Versión"}'
+
+
 def card_header(title, pill, green=False):
     css = "pill green" if green else "pill"
     st.markdown(f'<div class="card-header"><h2>{title}</h2><span class="{css}">{pill}</span></div>', unsafe_allow_html=True)
@@ -336,6 +394,8 @@ if "sheet_records" not in st.session_state:
     st.session_state.sheet_records = api_get(budget_path, []) or []
 if "history_items" not in st.session_state:
     st.session_state.history_items = []
+if "selected_prestaciones_version" not in st.session_state:
+    st.session_state.selected_prestaciones_version = None
 
 if not st.session_state.get("flask_ready", False):
     st.warning(st.session_state.get("flask_message", "Flask no está disponible."))
@@ -353,65 +413,59 @@ for logo in [logo_one, logo_two]:
         logo_html += f'<img src="data:{mime};base64,{encoded}" alt="Budget Planning">'
 
 st.markdown(f'<header class="hero"><div class="logos">{logo_html}<span class="divider"></span></div><div class="hero-line"></div><h1>Budget Planning 2027</h1></header>', unsafe_allow_html=True)
-st.markdown('<div class="section-label">Dashboard central</div>', unsafe_allow_html=True)
 
 options = managers_from_employees(st.session_state.employees)
 
-with st.container():
-    manager_col, info_col, update_col, mail_col = st.columns([1.2, 1.2, 1.2, 1.4], gap="medium")
-    with manager_col:
-        with st.container(border=True):
-            st.markdown('<span class="dashboard-marker"></span>', unsafe_allow_html=True)
-            card_header("Managers", "Corporate")
-            if st.button("General", key="general", use_container_width=True):
-                st.session_state.selected_manager = None
-                st.session_state.selected_history_lote = None
-                st.session_state.selected_budget_version = None
-                st.session_state.sheet_records = api_get("budget_actual", []) or []
-                st.session_state.history_items = []
-                st.rerun()
-            manager_pick = st.selectbox("Manager", options, index=None, key="manager_pick", label_visibility="collapsed", placeholder="Buscar por SGI o nombre", format_func=manager_option_label)
-            if manager_pick:
-                if manager_pick["manager"] != st.session_state.selected_manager:
-                    st.session_state.selected_manager = manager_pick["manager"]
-                    st.session_state.selected_history_lote = None
-                    st.session_state.selected_budget_version = None
-                    team = api_get(f'equipo/{quote(manager_pick["manager"], safe="")}', []) or []
-                    st.session_state.sheet_records = team
-                    st.session_state.history_items = api_get(f'historial/{quote(manager_pick["manager"], safe="")}', []) or []
-                    st.rerun()
-    with info_col:
-        with st.container(border=True):
-            st.markdown('<span class="dashboard-marker"></span>', unsafe_allow_html=True)
-            card_header("Información General", "Activa", True)
-            current = st.session_state.sheet_records
-            country = current[0].get("pais") or current[0].get("country") or "-" if current else "-"
-            st.markdown('<div style="padding:14px">', unsafe_allow_html=True)
-            for label, value in [("País", country), ("Manager seleccionado", next((x["nombre"] for x in options if x["manager"] == st.session_state.selected_manager), "General")), ("Headcount", len(current))]:
-                st.markdown(f'<div class="metric"><small>{label}</small><strong>{value}</strong></div><div style="height:8px"></div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-    with update_col:
-        with st.container(border=True):
-            st.markdown('<span class="dashboard-marker"></span>', unsafe_allow_html=True)
-            card_header("Actualización", "Live")
-            st.markdown(f'<div style="padding:14px"><div class="metric"><small>Última actualización</small><strong>{datetime.now().strftime("%d %b %Y, %H:%M")}</strong></div><div style="height:8px"></div><div class="metric"><small>Estado</small><strong>En revisión</strong></div><div style="height:8px"></div><div class="metric"><small>Próxima métrica</small><strong>Compensación</strong></div></div>', unsafe_allow_html=True)
-    with mail_col:
-        with st.container(border=True):
-            st.markdown('<span class="dashboard-marker"></span>', unsafe_allow_html=True)
-            card_header("Envío de Correos", "Budget Planning")
-            selected_mail_options = st.multiselect("Managers", options, key="selected_mail", label_visibility="collapsed", format_func=manager_option_label, placeholder="Buscar por SGI o nombre")
-            if st.button("📧 Enviar Correos", type="primary", use_container_width=True):
-                try:
-                    result = api_post("enviar_correos", json={"managers": [item["manager"] for item in selected_mail_options]}).json()
-                    st.success(result.get("message", "Solicitud enviada."))
-                except requests.RequestException as exc:
-                    st.error(f"No fue posible enviar los correos: {exc}")
+with st.sidebar:
+    st.markdown("### Centro de control")
+    st.caption("Compensation & Budget Planning")
+    if st.button("General", key="general", use_container_width=True):
+        st.session_state.selected_manager = None
+        st.session_state.selected_history_lote = None
+        st.session_state.selected_budget_version = None
+        st.session_state.sheet_records = api_get("budget_actual", []) or []
+        st.session_state.history_items = []
+        st.rerun()
+    manager_pick = st.selectbox("Manager", options, index=None, key="manager_pick", placeholder="Buscar por SGI o nombre", format_func=manager_option_label)
+    if manager_pick and manager_pick["manager"] != st.session_state.selected_manager:
+        st.session_state.selected_manager = manager_pick["manager"]
+        st.session_state.selected_history_lote = None
+        st.session_state.selected_budget_version = None
+        team = api_get(f'equipo/{quote(manager_pick["manager"], safe="")}', []) or []
+        st.session_state.sheet_records = team
+        st.session_state.history_items = api_get(f'historial/{quote(manager_pick["manager"], safe="")}', []) or []
+        st.rerun()
+    st.divider()
+    st.markdown("#### Envío de correos")
+    selected_mail_options = st.multiselect("Managers", options, key="selected_mail", format_func=manager_option_label, placeholder="Seleccionar managers")
+    if st.button("📧 Enviar Correos", type="primary", use_container_width=True):
+        try:
+            result = api_post("enviar_correos", json={"managers": [item["manager"] for item in selected_mail_options]}).json()
+            st.success(result.get("message", "Solicitud enviada."))
+        except requests.RequestException as exc:
+            st.error(f"No fue posible enviar los correos: {exc}")
+
+current = st.session_state.sheet_records
+country = current[0].get("pais") or current[0].get("country") or "-" if current else "-"
+manager_name = next((x["nombre"] for x in options if x["manager"] == st.session_state.selected_manager), "General")
+st.markdown('<div class="section-label">Executive overview</div>', unsafe_allow_html=True)
+kpi_one, kpi_two, kpi_three, kpi_four = st.columns(4, gap="medium")
+with kpi_one:
+    st.metric("Headcount", len(current), border=True)
+with kpi_two:
+    st.metric("País", country, border=True)
+with kpi_three:
+    st.metric("Manager", manager_name, border=True)
+with kpi_four:
+    st.metric("Estado", "En revisión", border=True)
 
 consolidation_slot = st.empty()
 top_history_slot = st.empty()
 sheet_slot = st.empty()
 budget_history_slot = st.empty()
 
+if "action_panel_open" not in st.session_state:
+    st.session_state.action_panel_open = False
 completed_items = api_get("completados", []) or []
 budget_versions = api_get("budget_versiones", []) or []
 
@@ -420,93 +474,200 @@ def render_consolidation(target):
     with target.container(border=True):
         card_header("📥 Consolidación de Respuestas", "Budget Planning")
         consolidation_files = st.file_uploader("Selecciona archivos Excel", type=["xlsx"], accept_multiple_files=True, key="consolidation_files")
-        consolidation_action, consolidation_status = st.columns([1, 3], gap="medium")
-        with consolidation_action:
-            consolidate_clicked = st.button("📥 Consolidar Archivos", type="primary", use_container_width=True)
-        with consolidation_status:
-            if consolidate_clicked:
-                if not consolidation_files:
-                    st.warning("Selecciona al menos un archivo.")
-                else:
-                    try:
-                        payload = [("files", (file.name, file.getvalue(), file.type)) for file in consolidation_files]
-                        result = api_post("consolidar_excels", files=payload)
-                        st.success(result.json().get("message", "Consolidación completada correctamente"))
-                        consolidated = requests.get(endpoint("descargar_consolidado"), timeout=REQUEST_TIMEOUT)
-                        consolidated.raise_for_status()
-                        st.download_button("Descargar consolidado", consolidated.content, file_name="consolidado.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    except requests.RequestException as exc:
-                        st.error(f"No fue posible consolidar: {exc}")
+        consolidate_clicked = st.button("📥 Consolidar Archivos", type="primary", use_container_width=True)
+        if consolidate_clicked:
+            if not consolidation_files:
+                st.warning("Selecciona al menos un archivo.")
+            else:
+                try:
+                    payload = [("files", (file.name, file.getvalue(), file.type)) for file in consolidation_files]
+                    result = api_post("consolidar_excels", files=payload)
+                    st.success(result.json().get("message", "Consolidación completada correctamente"))
+                    consolidated = requests.get(endpoint("descargar_consolidado"), timeout=REQUEST_TIMEOUT)
+                    consolidated.raise_for_status()
+                    st.download_button("Descargar consolidado", consolidated.content, file_name="consolidado.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+                except requests.RequestException as exc:
+                    st.error(f"No fue posible consolidar: {exc}")
 
 
 def render_top_history(target):
     with target.container():
-        history_col, completed_col = st.columns([1.2, 1], gap="medium")
-        with history_col:
-            with st.container(border=True):
-                card_header("Histórico del Manager", "Auditoría")
-                history_rows(st.session_state.history_items)
-                selected_lote = st.selectbox("Lote histórico", [item.get("lote_id") for item in st.session_state.history_items if item.get("lote_id")], index=None, label_visibility="collapsed", placeholder="Selecciona una versión")
-                if selected_lote:
-                    detail = api_get(f"historial_detalle/{quote(selected_lote, safe='')}", []) or []
-                    if selected_lote != st.session_state.selected_history_lote:
-                        st.session_state.selected_history_lote = selected_lote
-                        st.session_state.selected_budget_version = None
-                        st.session_state.sheet_records = detail
-                        st.rerun()
-                    if detail:
-                        st.dataframe(pd.DataFrame(detail), use_container_width=True, hide_index=True, height=220)
-                    history_action_one, history_action_two = st.columns(2)
-                    with history_action_one:
-                        if st.button("Aprobar", type="primary", use_container_width=True):
-                            try:
-                                api_post(f"aprobar/{quote(selected_lote, safe='')}")
-                                st.success("Histórico aprobado.")
-                            except requests.RequestException as exc:
-                                st.error(f"No fue posible aprobar: {exc}")
-                    with history_action_two:
+        with st.container(border=True):
+            card_header("Histórico del Manager", "Auditoría")
+            history_options = [item.get("lote_id") for item in st.session_state.history_items if item.get("lote_id")]
+            selected_lote = st.selectbox("Lote histórico", history_options, index=None, label_visibility="collapsed", placeholder="Selecciona una versión")
+            if selected_lote:
+                detail = api_get(f"historial_detalle/{quote(selected_lote, safe='')}", []) or []
+                if selected_lote != st.session_state.selected_history_lote:
+                    st.session_state.selected_history_lote = selected_lote
+                    st.session_state.selected_budget_version = None
+                    st.session_state.sheet_records = detail
+                    st.rerun()
+                if detail:
+                    st.dataframe(pd.DataFrame(detail), use_container_width=True, hide_index=True, height=220)
+                history_action_one, history_action_two = st.columns(2)
+                with history_action_one:
+                    if st.button("Aprobar", type="primary", use_container_width=True):
                         try:
-                            history_excel = requests.get(endpoint(f"excel/{quote(selected_lote, safe='')}"), timeout=REQUEST_TIMEOUT)
-                            history_excel.raise_for_status()
-                            st.download_button("Descargar Excel", history_excel.content, file_name=f"Historico_{selected_lote}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-                        except requests.RequestException:
-                            st.button("Descargar Excel", disabled=True, use_container_width=True)
-        with completed_col:
-            with st.container(border=True):
-                card_header("Completados", "Pendientes de sábana")
-                history_rows(completed_items)
-                if completed_items:
-                    st.dataframe(pd.DataFrame(completed_items), use_container_width=True, hide_index=True, height=220)
+                            api_post(f"aprobar/{quote(selected_lote, safe='')}")
+                            st.success("Histórico aprobado.")
+                        except requests.RequestException as exc:
+                            st.error(f"No fue posible aprobar: {exc}")
+                with history_action_two:
+                    try:
+                        history_excel = requests.get(endpoint(f"excel/{quote(selected_lote, safe='')}"), timeout=REQUEST_TIMEOUT)
+                        history_excel.raise_for_status()
+                        st.download_button("Descargar Excel", history_excel.content, file_name=f"Historico_{selected_lote}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+                    except requests.RequestException:
+                        st.button("Descargar Excel", disabled=True, use_container_width=True)
+        with st.expander("Completados", expanded=False):
+            if completed_items:
+                st.dataframe(pd.DataFrame(completed_items), use_container_width=True, hide_index=True, height=180)
+            else:
+                st.caption("No hay históricos aprobados pendientes.")
+
+
+def render_prestaciones(target):
+    with target.container():
+        with st.expander("Prestaciones", expanded=False):
+            card_header("Prestaciones", "Compensación")
+            prestaciones_records = api_get("prestaciones_generales", None)
+            if prestaciones_records is None:
+                st.error("No fue posible obtener prestaciones_generales desde Flask.")
+                return
+
+            st.write(f"Prestaciones encontradas: {len(prestaciones_records)}")
+            if not prestaciones_records:
+                st.warning("El endpoint prestaciones_generales respondió 0 registros.")
+                return
+
+            prestaciones_columns = [
+                "pais", "budget", "empresa", "unidad_negocio", "categoria",
+                "sindicato", "prestacion", "tipo_valor", "valor", "observaciones",
+            ]
+            prestaciones_frame = pd.DataFrame(prestaciones_records)
+            visible_columns = [column for column in prestaciones_columns if column in prestaciones_frame.columns]
+            prestaciones_frame = prestaciones_frame[visible_columns]
+            edited_prestaciones = st.data_editor(
+                prestaciones_frame,
+                use_container_width=True,
+                num_rows="dynamic",
+                height=420,
+                key="prestaciones_editor",
+                hide_index=True,
+            )
+            action_col, description_col = st.columns([1, 2], gap="medium")
+            with action_col:
+                save_prestaciones = st.button("Guardar Prestaciones", type="primary", use_container_width=True)
+            with description_col:
+                prestaciones_description = st.text_input("Descripción de versión", placeholder="Ej. Ajuste CEMIX", label_visibility="collapsed")
+            if save_prestaciones:
+                payload = {
+                    "registros": edited_prestaciones.fillna("").to_dict(orient="records"),
+                    "descripcion": prestaciones_description.strip() or "Actualización de prestaciones",
+                    "usuario": os.getenv("USERNAME") or os.getenv("USER") or "Streamlit",
+                }
+                try:
+                    result = api_post("guardar_prestaciones", json=payload).json()
+                    st.success(f'Prestaciones guardadas. Versión: {result.get("version_id", "registrada")}')
+                except requests.RequestException as exc:
+                    st.error(f"No fue posible guardar prestaciones: {exc}")
+
+
+def render_prestaciones_history(target):
+    with target.container(border=True):
+        card_header("Histórico Prestaciones", "Versiones")
+        versions = api_get_silent("prestaciones_versiones", []) or []
+        version_ids = [item.get("version_id") for item in versions if item.get("version_id")]
+        version_map = {item.get("version_id"): item for item in versions}
+        selected_version = st.selectbox(
+            "Versión de prestaciones",
+            [None] + version_ids,
+            format_func=lambda value: "Versión actual" if value is None else version_label(version_map[value]),
+            index=0,
+            key="prestaciones_version_pick",
+            label_visibility="collapsed",
+            placeholder="Selecciona una versión",
+        )
+        if selected_version and selected_version != st.session_state.selected_prestaciones_version:
+            detail = api_get_silent(f"prestaciones_historico/{quote(str(selected_version), safe='')}", []) or []
+            st.session_state.selected_prestaciones_version = selected_version
+            if detail:
+                st.dataframe(pd.DataFrame(detail), use_container_width=True, hide_index=True, height=260)
+        elif selected_version:
+            detail = api_get_silent(f"prestaciones_historico/{quote(str(selected_version), safe='')}", []) or []
+            if detail:
+                st.dataframe(pd.DataFrame(detail), use_container_width=True, hide_index=True, height=260)
+        else:
+            st.caption("Selecciona una versión para consultar sus datos asociados.")
 
 
 def render_sheet(target):
     with target.container():
-        st.markdown('<div class="sheet-panel"><div class="sheet-head"><div><h2>General</h2><p>Vista consolidada de la organización para Budget Planning 2027</p></div><span class="sheet-badge">Corporate view</span></div>', unsafe_allow_html=True)
-        st.markdown('<div class="action-bar">', unsafe_allow_html=True)
-        action_one, action_two, action_three, action_four = st.columns([1.05, 1.05, 1.05, 1.35], gap="small")
-        with action_one:
-            if st.button("+ Nuevo Registro", use_container_width=True):
-                st.session_state.sheet_records = [{}] + st.session_state.sheet_records
-                st.rerun()
-        with action_two:
-            excel_payload = {"manager": st.session_state.selected_manager or "General", "registros": frame_to_records(records_to_frame(st.session_state.sheet_records))}
-            try:
-                excel_response = api_post("excel_actual", json=excel_payload)
-                st.download_button("Descargar Excel", excel_response.content, file_name="Budget_General.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-            except requests.RequestException:
-                st.button("Descargar Excel", disabled=True, use_container_width=True)
-        with action_three:
-            save_clicked = st.button("Guardar", type="primary", use_container_width=True)
-        with action_four:
-            with st.form("update_sheet_form", clear_on_submit=False):
-                st.markdown('<p class="action-label">Actualizar Sábana</p>', unsafe_allow_html=True)
-                update_file = st.file_uploader("Archivo .xlsx", type=["xlsx"], key="update_sheet", label_visibility="collapsed")
-                if update_file:
-                    st.session_state.update_sheet_name = os.path.basename(update_file.name)
-                    st.session_state.update_sheet_bytes = update_file.getvalue()
-                if st.session_state.update_sheet_name:
-                    st.markdown(f'<div class="selected-file">Archivo: {st.session_state.update_sheet_name}</div>', unsafe_allow_html=True)
-                update_clicked = st.form_submit_button("Actualizar Sábana", type="primary", use_container_width=True)
+        save_clicked = False
+        update_clicked = False
+        with st.expander("▶ Centro de Acciones", expanded=False):
+            st.markdown('<div class="action-center action-toolbar">', unsafe_allow_html=True)
+            card_header("Centro de Acciones", "Operación")
+            st.markdown('<p class="action-note">Administra la sábana, carga archivos y confirma los cambios desde este panel.</p>', unsafe_allow_html=True)
+            action_one, action_two, action_three, action_four = st.columns(4, gap="small")
+            with action_one:
+                if st.button("+ Nuevo Registro", use_container_width=True):
+                    st.session_state.sheet_records = [{}] + st.session_state.sheet_records
+                    st.rerun()
+            with action_two:
+                excel_payload = {"manager": st.session_state.selected_manager or "General", "registros": frame_to_records(records_to_frame(st.session_state.sheet_records))}
+                try:
+                    excel_response = api_post("excel_actual", json=excel_payload)
+                    st.download_button("Descargar Excel", excel_response.content, file_name="Budget_General.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+                except requests.RequestException:
+                    st.button("Descargar Excel", disabled=True, use_container_width=True)
+            with action_three:
+                save_clicked = st.button("Guardar", type="primary", use_container_width=True)
+            with action_four:
+                with st.form("update_sheet_form", clear_on_submit=False):
+                    st.markdown('<p class="action-label">Actualizar Sábana</p>', unsafe_allow_html=True)
+                    update_file = st.file_uploader("Archivo .xlsx", type=["xlsx"], key="update_sheet", label_visibility="collapsed")
+                    if update_file:
+                        st.session_state.update_sheet_name = os.path.basename(update_file.name)
+                        st.session_state.update_sheet_bytes = update_file.getvalue()
+                    if st.session_state.update_sheet_name:
+                        st.markdown(f'<div class="selected-file">Archivo: {st.session_state.update_sheet_name}</div>', unsafe_allow_html=True)
+                    update_clicked = st.form_submit_button("Actualizar Sábana", type="primary", use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="sheet-panel primary"><div class="sheet-head"><div><h2>General</h2><p>Vista consolidada de la organización para Budget Planning 2027</p></div><span class="sheet-badge">Corporate view</span></div>', unsafe_allow_html=True)
+        budget_frame = records_to_frame(st.session_state.sheet_records)
+        if AgGrid and GridOptionsBuilder:
+            grid_builder = GridOptionsBuilder.from_dataframe(budget_frame)
+            grid_builder.configure_default_column(
+                editable=True,
+                filter=True,
+                sortable=True,
+                resizable=True,
+                wrapText=False,
+            )
+            grid_builder.configure_grid_options(
+                pagination=False,
+                sideBar="filters",
+                enableRangeSelection=True,
+                stopEditingWhenCellsLoseFocus=True,
+            )
+            grid_response = AgGrid(
+                budget_frame,
+                gridOptions=grid_builder.build(),
+                height=640,
+                width="100%",
+                theme="streamlit",
+                enable_enterprise_modules=False,
+                allow_unsafe_jscode=False,
+                fit_columns_on_grid_load=False,
+                key="budget_aggrid",
+            )
+            data = pd.DataFrame(grid_response.get("data", budget_frame))
+        else:
+            st.info("Instala streamlit-aggrid para habilitar la vista avanzada de la sábana.")
+            data = st.data_editor(budget_frame, use_container_width=True, num_rows="dynamic", height=620, key="budget_editor")
         st.markdown('</div>', unsafe_allow_html=True)
         if update_clicked:
             if not st.session_state.update_sheet_name or not st.session_state.update_sheet_bytes:
@@ -522,13 +683,6 @@ def render_sheet(target):
                         st.success(f'✅ Sábana actualizada correctamente. Versión: {result.get("version_id", "ok")}')
                     except (ValueError, requests.RequestException) as exc:
                         st.error(f"❌ Error al actualizar: {exc}")
-        data = st.data_editor(records_to_frame(st.session_state.sheet_records), use_container_width=True, num_rows="dynamic", height=620, key="budget_editor")
-        with st.expander("Datos adicionales del LEFT JOIN"):
-            raw_frame = pd.DataFrame(st.session_state.sheet_records)
-            if raw_frame.empty:
-                st.caption("No hay datos adicionales disponibles.")
-            else:
-                st.dataframe(raw_frame, use_container_width=True, hide_index=True, height=260)
         if save_clicked:
             try:
                 result = api_post("guardar_registro", json={"manager": st.session_state.selected_manager or "General", "registros": frame_to_records(data)}).json()
@@ -542,32 +696,39 @@ def render_sheet(target):
 
 
 def render_budget_history(target):
-    with target.container():
-        with st.container(border=True):
-            card_header("Histórico Budget", "Versiones")
-            current_label = "Versión actual · Sábana viva"
-            if st.button(current_label, key="budget_version_current", use_container_width=True):
-                st.session_state.selected_budget_version = None
-                st.session_state.sheet_records = api_get("budget_actual", []) or []
-                st.rerun()
-            for version in budget_versions:
-                version_id = version.get("version_id")
-                version_label = f'{version.get("fecha_creacion", "Sin fecha")} · {version.get("descripcion") or version_id}'
-                if st.button(version_label, key=f"budget_version_{version_id}", use_container_width=True):
-                    st.session_state.selected_budget_version = version_id
-                    st.session_state.sheet_records = api_get(f"budget_actual/{quote(version_id, safe='')}", []) or []
-                    st.rerun()
-            if not budget_versions:
-                st.caption("No hay versiones registradas todavía.")
+    with target.container(border=True):
+        card_header("Histórico Budget", "Versiones")
+        version_map = {version.get("version_id"): version for version in budget_versions}
+        selected_version = st.selectbox(
+            "Versión Budget",
+            [None] + list(version_map),
+            format_func=lambda value: "Versión actual - Sábana viva" if value is None else version_label(version_map[value]),
+            index=0,
+            key="budget_version_pick",
+            label_visibility="collapsed",
+            placeholder="Selecciona una versión",
+        )
+        if selected_version != st.session_state.selected_budget_version:
+            st.session_state.selected_budget_version = selected_version
+            budget_path = "budget_actual" if selected_version is None else f"budget_actual/{quote(str(selected_version), safe='')}"
+            st.session_state.sheet_records = api_get(budget_path, []) or []
+            st.rerun()
+        if not budget_versions:
+            st.caption("No hay versiones registradas todavía.")
 
 
-render_consolidation(consolidation_slot)
-render_top_history(top_history_slot)
 render_sheet(sheet_slot)
+
+prestaciones_slot = st.empty()
+render_prestaciones(prestaciones_slot)
+
+with st.sidebar:
+    st.divider()
+    st.markdown("#### Consolidación")
+    render_consolidation(st.sidebar)
+
+st.markdown('<div class="executive-label">Históricos y seguimiento</div>', unsafe_allow_html=True)
+render_top_history(top_history_slot)
+prestaciones_history_slot = st.empty()
 render_budget_history(budget_history_slot)
-
-with st.expander("Estado de conexión"):
-    st.write(f"Backend Flask configurado: {API_URL}")
-    st.caption("La interfaz Streamlit consume los endpoints existentes y no modifica el backend.")
-
-st.caption(f"Frontend Streamlit paralelo · Backend Flask: {API_URL}")
+render_prestaciones_history(prestaciones_history_slot)
